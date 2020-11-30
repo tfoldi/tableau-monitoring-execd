@@ -1,67 +1,58 @@
-use ureq::{Agent, AgentBuilder};
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use clap::{App, Arg};
 
-
-fn get_epoch_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-}
-
-fn get_system_info_xml(agent: &Agent, url: &String) -> Result<String, ureq::Error> {
-    let xml_server_info = agent.get(url)
-        .call()?
-        .into_string()?;
-
-    Ok(xml_server_info)
-}
-
-fn parse_system_info(xml: &String) -> Result<(), roxmltree::Error> {
-    let doc = roxmltree::Document::parse(&*xml)?;
-
-    for node in doc.descendants() {
-        let tag_name = node.tag_name().name();
-
-        if tag_name == "" || tag_name == "systeminfo" || tag_name == "machines" || tag_name == "machine" {
-            continue;
-        }
-
-        let status = node.attribute("status").unwrap_or("Unknown");
-
-        if tag_name == "service" {
-            println!("tableau_systeminfo,worker=all status=\"{}\" {}", status, get_epoch_ms())
-        } else {
-            let worker= node.attribute("worker").unwrap_or("Unknown");
-            println!("tableau_systeminfo,process=\"{}\",worker=\"{}\" status=\"{}\" {}"
-                     , tag_name
-                     , worker
-                     , status
-                     , get_epoch_ms());
-
-        }
-    };
-
-    Ok(())
-}
-
-fn check_system_info(agent: &Agent, url: &String) {
-    match get_system_info_xml(&agent, url) {
-        Err(err) => eprintln!("Cannot fetch systeminfo.xml: {}", err.to_string()),
-        Ok(xml) => {
-            if let Err(err) = parse_system_info(&xml) {
-                eprintln!("Cannot parse systeminfo.xml: {}", err.to_string());
-            }
-        }
-    };
-}
 
 fn main() {
-    let agent: Agent = AgentBuilder::new()
-        .timeout_read(Duration::from_secs(5))
-        .timeout_write(Duration::from_secs(5))
-        .build();
+    let matches = App::new("tableau-monitoring-execd")
+        .version("0.1.0")
+        .author("Tamas Foldi <tfoldi@starschema.com>")
+        .about("telegraf execd for getting Tableau Cluster status using TSM API and serverinfo.xml")
+        .arg(  Arg::new("tsm_user")
+            .short('u')
+            .long("tsm_user")
+            .value_name("USERNAME")
+            .about("Username for TSM Authentication")
+            .env("TME_TSM_USER")
+            .required_if_eq_any(&[("checks", "all"),("checks","tsm")])
+            .takes_value(true)
+        )
+        .arg(  Arg::new("tsm_password")
+            .short('p')
+            .long("tsm_password")
+            .value_name("PASSWORD")
+            .about("PASSWORD for TSM Authentication")
+            .env("TME_TSM_PASSWORD")
+            .required_if_eq_any(&[("checks", "all"),("checks","tsm")])
+            .takes_value(true)
+        )
+        .arg(  Arg::new("tsm_hostname")
+            .short('h')
+            .long("tsm_hostname")
+            .value_name("BASEURL")
+            .about("Tableau Server TSM's base url")
+            .env("TME_TSM_HOSTNAME")
+            .default_value("https://localhost:8850/")
+            .takes_value(true)
+        )
+        .arg(  Arg::new("systeminfo_hostname")
+            .short('s')
+            .long("si_hostname")
+            .value_name("BASEURL")
+            .about("Tableau Server's systeminfo web server base URL")
+            .env("TME_SI_HOSTNAME")
+            .default_value("https://localhost/")
+            .takes_value(true)
+        )
+        .arg(  Arg::new("checks")
+            .short('c')
+            .long("checks")
+            .value_name("CHECKS")
+            .about("Username for TSM Authentication")
+            .env("TME_CHECKS")
+            .takes_value(true)
+            .default_value("all")
+            .possible_values(&["all", "tsm", "systeminfo"])
+        )
+        .get_matches();
 
-    check_system_info(&agent, &"https://insights.starschema.net/admin/systeminfo.xml".to_string());
+    tableau_monitoring_execd::run(&matches);
 }
