@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize};
 use clap::ArgMatches;
 use std::error::Error;
+use std::io::BufRead;
 
 mod tls;
 
@@ -178,11 +179,14 @@ pub fn run(args: &ArgMatches ) {
         .tls_config(Arc::new(tls_config))
         .build();
 
-    if let Err(e) = check_tsm_nodes(&agent, &args ) {
-        eprintln!("check_tsm_nodes error: {}", e.to_string());
+    for _ in std::io::stdin().lock().lines() {
+        if let Err(e) = check_tsm_nodes(&agent, &args ) {
+            eprintln!("check_tsm_nodes error: {}", e.to_string());
+        }
+
+        if let Err(e) = check_system_info(&agent, hostname  ) {
+            eprintln!("check_system_info error: {}", e.to_string());
+        }
     }
 
-    if let Err(e) = check_system_info(&agent, hostname  ) {
-        eprintln!("check_system_info error: {}", e.to_string());
-    }
 }
