@@ -51,11 +51,11 @@ struct InstanceStatus {
 }
 
 
-fn get_epoch_ms() -> u128 {
+fn get_epoch_nanos() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_millis()
+        .as_nanos()
 }
 
 fn get_system_info_xml(agent: &Agent, url: &String) -> Result<String, ureq::Error> {
@@ -79,14 +79,14 @@ fn parse_system_info(xml: &String) -> Result<(), roxmltree::Error> {
         let status = node.attribute("status").unwrap_or("Unknown");
 
         if tag_name == "service" {
-            println!("tableau_systeminfo,worker=all status=\"{}\" {}", status, get_epoch_ms())
+            println!("tableau_systeminfo,worker=all status=\"{}\" {}", status, get_epoch_nanos())
         } else {
             let worker = node.attribute("worker").unwrap_or("Unknown");
             println!("tableau_systeminfo,process={},worker={} status=\"{}\" {}"
                      , tag_name
                      , worker
                      , status
-                     , get_epoch_ms());
+                     , get_epoch_nanos());
         }
     };
 
@@ -128,16 +128,16 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error>
     println!("tableau_tsm_status,node=all,service=all,instance=all status=\"{}\",requested_deployment_state=\"{}\" {}",
              cluster_status.rollup_status,
              cluster_status.rollup_requested_deployment_state,
-             get_epoch_ms()
+             get_epoch_nanos()
     );
 
     // Node Level
     for node in cluster_status.nodes {
-        println!("tableau_tsm_status,node={},service=all,instance=all status=\"{}\",requested_deployment_state={} {}",
+        println!("tableau_tsm_status,node={},service=all,instance=all status=\"{}\",requested_deployment_state=\"{}\" {}",
                  node.node_id,
                  node.rollup_status,
                  node.rollup_requested_deployment_state,
-                 get_epoch_ms()
+                 get_epoch_nanos()
         );
 
         // Instance Level
@@ -154,7 +154,7 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error>
                          instance.message.unwrap_or("".to_string()),
                          instance.code.unwrap_or("".to_string()),
                          instance.timestamp_utc,
-                         get_epoch_ms()
+                         get_epoch_nanos()
                 );
             }
         }
