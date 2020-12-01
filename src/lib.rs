@@ -20,7 +20,7 @@ struct ClusterStatus {
 struct ClusterStatus_ {
     nodes: Vec<NodeStatus>,
     rollup_status: String,
-    rollup_requested_deployment_state: String
+    rollup_requested_deployment_state: String,
 }
 
 #[derive(Deserialize)]
@@ -29,14 +29,14 @@ struct NodeStatus {
     services: Vec<ServiceStatus>,
     node_id: String,
     rollup_status: String,
-    rollup_requested_deployment_state: String
+    rollup_requested_deployment_state: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ServiceStatus {
     service_name: String,
-    instances: Vec<InstanceStatus>
+    instances: Vec<InstanceStatus>,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +50,15 @@ struct InstanceStatus {
     current_deployment_state: String,
 }
 
+fn get_status_as_value(status: &String) -> u8 {
+    if status.eq("Active") || status.eq("Enabled") || status.eq("Running") {
+        0
+    } else if status.eq("Busy") {
+        1
+    } else {
+        2
+    }
+}
 
 fn get_epoch_nanos() -> u128 {
     SystemTime::now()
@@ -79,12 +88,16 @@ fn parse_system_info(xml: &String) -> Result<(), roxmltree::Error> {
         let status = node.attribute("status").unwrap_or("Unknown");
 
         if tag_name == "service" {
-            println!("tableau_systeminfo,worker=all status=\"{}\" {}", status, get_epoch_nanos())
+            println!("tableau_systeminfo,worker=all status_code={}i,status=\"{}\" {}"
+                     , get_status_as_value(&status.to_string())
+                     , status
+                     , get_epoch_nanos())
         } else {
             let worker = node.attribute("worker").unwrap_or("Unknown");
-            println!("tableau_systeminfo,process={},worker={} status=\"{}\" {}"
+            println!("tableau_systeminfo,process={},worker={} status_code={}i,status=\"{}\" {}"
                      , tag_name
                      , worker
+                     , get_status_as_value(&status.to_string())
                      , status
                      , get_epoch_nanos());
         }
@@ -98,12 +111,12 @@ fn check_system_info(agent: &Agent, url: &str) -> Result<(), Box<dyn Error>> {
 
     match get_system_info_xml(&agent, &url) {
         Ok(xml) => Ok(parse_system_info(&xml)?),
-        Err(e) => Err( Box::new(e) )
+        Err(e) => Err(Box::new(e))
     }
 }
 
 
-fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error> {
+fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> {
     let tsm_host = args.value_of("tsm_hostname").expect("tsm_hostname must be defined");
 
     let logon_url = std::format!("{}api/0.5/login",tsm_host);
@@ -119,13 +132,14 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error>
         .into_string()?;
 
 
-    let status : ClusterStatus = agent.get(&status_url)
+    let status: ClusterStatus = agent.get(&status_url)
         .call()?
         .into_json()?;
     let cluster_status = status.cluster_status;
 
     // Cluster level
-    println!("tableau_tsm_status,node=all,service=all,instance=all status=\"{}\",requested_deployment_state=\"{}\" {}",
+    println!("tableau_tsm_status,node=all,service=all,instance=all status_code={}i,status=\"{}\",requested_deployment_state=\"{}\" {}",
+             get_status_as_value(&cluster_status.rollup_status),
              cluster_status.rollup_status,
              cluster_status.rollup_requested_deployment_state,
              get_epoch_nanos()
@@ -133,8 +147,10 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error>
 
     // Node Level
     for node in cluster_status.nodes {
-        println!("tableau_tsm_status,node={},service=all,instance=all status=\"{}\",requested_deployment_state=\"{}\" {}",
+        println!("tableau_tsm_status,node={},service=all,instance=all \
+            status_code={}i,status=\"{}\",requested_deployment_state=\"{}\" {}",
                  node.node_id,
+                 get_status_as_value(&node.rollup_status),
                  node.rollup_status,
                  node.rollup_requested_deployment_state,
                  get_epoch_nanos()
@@ -144,11 +160,13 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error>
         for service in node.services {
             for instance in service.instances {
                 println!("tableau_tsm_status,node={},service={},instance={} \
-                            status=\"{}\",deployment_state=\"{}\",message=\"{}\",code=\"{}\",timestamp_utc={}i \
+                            status_code={}i,status=\"{}\",deployment_state=\"{}\"\
+                            ,message=\"{}\",code=\"{}\",timestamp_utc={}i \
                             {}",
                          node.node_id,
                          service.service_name,
                          instance.instance_id,
+                         get_status_as_value(&instance.process_status),
                          instance.process_status,
                          instance.current_deployment_state,
                          instance.message.unwrap_or("".to_string()),
@@ -158,15 +176,15 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches ) -> Result<(), ureq::Error>
                 );
             }
         }
-
     }
 
 
     Ok(())
 }
 
-pub fn run(args: &ArgMatches ) {
+pub fn run(args: &ArgMatches) {
     let hostname = args.value_of("systeminfo_hostname").expect("Missing Server hostname");
+    let checks = args.value_of("checks").expect("No checks are defined.");
 
     let mut tls_config = rustls::ClientConfig::new();
     tls_config
@@ -180,13 +198,17 @@ pub fn run(args: &ArgMatches ) {
         .build();
 
     for _ in std::io::stdin().lock().lines() {
-        if let Err(e) = check_tsm_nodes(&agent, &args ) {
-            eprintln!("check_tsm_nodes error: {}", e.to_string());
+
+        if checks.eq("all") || checks.eq("tsm") {
+            if let Err(e) = check_tsm_nodes(&agent, &args) {
+                eprintln!("check_tsm_nodes error: {}", e.to_string());
+            }
         }
 
-        if let Err(e) = check_system_info(&agent, hostname  ) {
-            eprintln!("check_system_info error: {}", e.to_string());
+        if checks.eq("all") || checks.eq("systeminfo") {
+            if let Err(e) = check_system_info(&agent, hostname) {
+                eprintln!("check_system_info error: {}", e.to_string());
+            }
         }
     }
-
 }
