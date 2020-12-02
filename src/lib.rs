@@ -201,12 +201,17 @@ pub fn run(args: &ArgMatches) {
 
         if checks.eq("all") || checks.eq("tsm") {
             if let Err(e) = check_tsm_nodes(&agent, &args) {
+                println!("tableau_tsm_status,node=all,service=all,instance=all status_code=3i,\
+                status=\"Unavailable\",requested_deployment_state=\"Unknown\" {}",
+                         get_epoch_nanos());
                 eprintln!("check_tsm_nodes error: {}", e.to_string());
             }
         }
 
         if checks.eq("all") || checks.eq("systeminfo") {
             if let Err(e) = check_system_info(&agent, hostname) {
+                println!("tableau_systeminfo,worker=all status_code=3i,status=\"Unavailable\" {}"
+                         , get_epoch_nanos());
                 eprintln!("check_system_info error: {}", e.to_string());
             }
         }
