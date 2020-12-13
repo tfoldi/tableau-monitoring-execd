@@ -52,7 +52,7 @@ struct InstanceStatus {
 fn get_status_as_value(status: &String) -> u8 {
     if status.eq("Active") || status.eq("Enabled") || status.eq("Running") {
         0
-    } else if status.eq("Busy") {
+    } else if status.eq("Busy") || status.eq("Passive") {
         1
     } else {
         2
