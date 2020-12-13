@@ -1,6 +1,5 @@
 use ureq::{Agent, AgentBuilder};
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::sync::Arc;
 use serde::{Deserialize};
 use clap::ArgMatches;
@@ -67,15 +66,17 @@ fn get_epoch_nanos() -> u128 {
         .as_nanos()
 }
 
-fn get_system_info_xml(agent: &Agent, url: &String) -> Result<String, ureq::Error> {
+fn get_system_info_xml(agent: &Agent, url: &String) -> Result<(String, u128), ureq::Error> {
+    let start = Instant::now();
+
     let xml_server_info = agent.get(url)
         .call()?
         .into_string()?;
 
-    Ok(xml_server_info)
+    Ok((xml_server_info, start.elapsed().as_micros()))
 }
 
-fn parse_system_info(xml: &String) -> Result<(), roxmltree::Error> {
+fn parse_system_info(xml: &String, elapsed: u128) -> Result<(), roxmltree::Error> {
     let doc = roxmltree::Document::parse(&*xml)?;
 
     for node in doc.descendants() {
@@ -88,9 +89,10 @@ fn parse_system_info(xml: &String) -> Result<(), roxmltree::Error> {
         let status = node.attribute("status").unwrap_or("Unknown");
 
         if tag_name == "service" {
-            println!("tableau_systeminfo,worker=all status_code={}i,status=\"{}\" {}"
+            println!("tableau_systeminfo,worker=all status_code={}i,status=\"{}\",elapsed={}i {}"
                      , get_status_as_value(&status.to_string())
                      , status
+                     , elapsed
                      , get_epoch_nanos())
         } else {
             let worker = node.attribute("worker").unwrap_or("Unknown");
@@ -110,7 +112,7 @@ fn check_system_info(agent: &Agent, url: &str) -> Result<(), Box<dyn Error>> {
     let url = std::format!("{}admin/systeminfo.xml", url);
 
     match get_system_info_xml(&agent, &url) {
-        Ok(xml) => Ok(parse_system_info(&xml)?),
+        Ok((xml, elapsed)) => Ok(parse_system_info(&xml, elapsed)?),
         Err(e) => Err(Box::new(e))
     }
 }
@@ -122,6 +124,7 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
     let logon_url = std::format!("{}api/0.5/login",tsm_host);
     let status_url = std::format!("{}api/0.5/status", tsm_host);
 
+    let start = Instant::now();
 
     agent.post(&logon_url)
         .send_json(ureq::json!({
@@ -138,10 +141,12 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
     let cluster_status = status.cluster_status;
 
     // Cluster level
-    println!("tableau_tsm_status,node=all,service=all,instance=all status_code={}i,status=\"{}\",requested_deployment_state=\"{}\" {}",
+    println!("tableau_tsm_status,node=all,service=all,instance=all status_code={}i,status=\"{}\"\
+        ,requested_deployment_state=\"{}\",elapsed={}i {}",
              get_status_as_value(&cluster_status.rollup_status),
              cluster_status.rollup_status,
              cluster_status.rollup_requested_deployment_state,
+             start.elapsed().as_micros(),
              get_epoch_nanos()
     );
 
@@ -198,7 +203,6 @@ pub fn run(args: &ArgMatches) {
         .build();
 
     for _ in std::io::stdin().lock().lines() {
-
         if checks.eq("all") || checks.eq("tsm") {
             if let Err(e) = check_tsm_nodes(&agent, &args) {
                 println!("tableau_tsm_status,node=all,service=all,instance=all status_code=3i,\
