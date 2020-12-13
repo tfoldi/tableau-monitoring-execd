@@ -49,13 +49,24 @@ struct InstanceStatus {
     current_deployment_state: String,
 }
 
-fn get_status_as_value(status: &String) -> u8 {
+fn get_status_as_value(status: &String, deployment: Option<&String>) -> i8 {
+
+
     if status.eq("Active") || status.eq("Enabled") || status.eq("Running") {
         0
     } else if status.eq("Busy") || status.eq("Passive") {
         1
     } else {
-        2
+        match deployment {
+            None => 2,
+            Some(state) => {
+                if state.eq("Disabled") {
+                    -1
+                } else {
+                    2
+                }
+            }
+        }
     }
 }
 
@@ -90,7 +101,7 @@ fn parse_system_info(xml: &String, elapsed: u128) -> Result<(), roxmltree::Error
 
         if tag_name == "service" {
             println!("tableau_systeminfo,worker=all status_code={}i,status=\"{}\",elapsed={}i {}"
-                     , get_status_as_value(&status.to_string())
+                     , get_status_as_value(&status.to_string(),None)
                      , status
                      , elapsed
                      , get_epoch_nanos())
@@ -99,7 +110,7 @@ fn parse_system_info(xml: &String, elapsed: u128) -> Result<(), roxmltree::Error
             println!("tableau_systeminfo,process={},worker={} status_code={}i,status=\"{}\" {}"
                      , tag_name
                      , worker
-                     , get_status_as_value(&status.to_string())
+                     , get_status_as_value(&status.to_string(),None)
                      , status
                      , get_epoch_nanos());
         }
@@ -143,7 +154,8 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
     // Cluster level
     println!("tableau_tsm_status,node=all,service=all,instance=all status_code={}i,status=\"{}\"\
         ,requested_deployment_state=\"{}\",elapsed={}i {}",
-             get_status_as_value(&cluster_status.rollup_status),
+             get_status_as_value(&cluster_status.rollup_status,
+                                 Some(&cluster_status.rollup_requested_deployment_state)),
              cluster_status.rollup_status,
              cluster_status.rollup_requested_deployment_state,
              start.elapsed().as_micros(),
@@ -155,7 +167,8 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
         println!("tableau_tsm_status,node={},service=all,instance=all \
             status_code={}i,status=\"{}\",requested_deployment_state=\"{}\" {}",
                  node.node_id,
-                 get_status_as_value(&node.rollup_status),
+                 get_status_as_value(&node.rollup_status,
+                                     Some(&node.rollup_requested_deployment_state)),
                  node.rollup_status,
                  node.rollup_requested_deployment_state,
                  get_epoch_nanos()
@@ -171,7 +184,8 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
                          node.node_id,
                          service.service_name,
                          instance.instance_id,
-                         get_status_as_value(&instance.process_status),
+                         get_status_as_value(&instance.process_status,
+                                             Some(&instance.current_deployment_state)),
                          instance.process_status,
                          instance.current_deployment_state,
                          instance.message.unwrap_or("".to_string()),
