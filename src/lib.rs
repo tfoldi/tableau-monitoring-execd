@@ -5,8 +5,15 @@ use serde::{Deserialize};
 use clap::ArgMatches;
 use std::error::Error;
 use std::io::BufRead;
+use std::os::unix::net::UnixStream;
 
 mod tls;
+
+mod passwordless_login;
+
+pub use passwordless_login::*;
+use thrift::protocol::{TBinaryInputProtocol, TBinaryOutputProtocol};
+
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -201,9 +208,23 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
     Ok(())
 }
 
+pub fn get_passwordless_cookie() {
+    let socket_tx = UnixStream::connect("/var/run/tableau/tab-controller-login-8850").unwrap();
+    let socket_rx = socket_tx.try_clone().unwrap();
+
+    let in_proto = TBinaryInputProtocol::new(socket_tx, true);
+    let out_proto = TBinaryOutputProtocol::new(socket_rx, true);
+    let mut client = PasswordLessLoginSyncClient::new(in_proto, out_proto);
+
+    println!("{:?}", client.login());
+
+}
+
 pub fn run(args: &ArgMatches) {
     let hostname = args.value_of("systeminfo_hostname").expect("Missing Server hostname");
     let checks = args.value_of("checks").expect("No checks are defined.");
+
+    get_passwordless_cookie();
 
     let mut tls_config = rustls::ClientConfig::new();
     tls_config

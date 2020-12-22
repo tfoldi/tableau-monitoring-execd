@@ -1,7 +1,7 @@
 enum PasswordLessLoginReturnCode {
-    SUCCESS = 0,
-    NOT_AUTHORIZED = 1,
-    ERROR = 2
+    PLL_SUCCESS = 0,
+    PLL_NOT_AUTHORIZED = 1,
+    PLL_ERROR = 2
 }
 
 struct PasswordLessLoginResult {
