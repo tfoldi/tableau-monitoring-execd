@@ -166,8 +166,6 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), Box<dyn Error
         let cookie = get_passwordless_cookie(login_result.cookie_name, login_result.cookie_value);
         status_req = agent.get(&status_url)
             .set("Cookie", &cookie.as_str());
-        println!("{:?}", status_req);
-
     } else {
         agent.post(&logon_url)
             .send_json(ureq::json!({
@@ -245,8 +243,6 @@ pub fn get_passwordless_result(socket_path: &str) -> thrift::Result<PasswordLess
     let mut client = PasswordLessLoginSyncClient::new(in_proto, out_proto);
 
     let passwordless_login_result = client.login();
-
-    println!("{:?}", passwordless_login_result);
 
     passwordless_login_result
 }
