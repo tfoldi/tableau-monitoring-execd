@@ -244,7 +244,7 @@ pub fn get_passwordless_result(socket_path: &str) -> thrift::Result<PasswordLess
 
     let passwordless_login_result = client.login();
 
-    println!("{:?}", client.login());
+    println!("{:?}", passwordless_login_result);
 
     passwordless_login_result
 }
