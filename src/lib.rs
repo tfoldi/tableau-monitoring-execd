@@ -160,7 +160,7 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), Box<dyn Error
     let status_req;
 
 
-    if cfg!(unix) && args.is_present("passwordless_login") {
+    if cfg!(unix) && args.is_present("passwordless") {
         let tsm_socket = args.value_of("tsm_socket").expect("TSM socket must be defined");
         let login_result = get_passwordless_result(tsm_socket)?;
         let cookie = get_passwordless_cookie(login_result.cookie_name, login_result.cookie_value);
