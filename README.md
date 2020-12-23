@@ -8,21 +8,24 @@ Telegraf execd for getting Tableau Cluster status using TSM API and serverinfo.x
 Command line parameters and environment variables:
 
 ```
-    tableau-monitoring-execd [OPTIONS]
+    tableau-monitoring-execd [FLAGS] [OPTIONS]
 
 FLAGS:
-        --help       Prints help information
-    -V, --version    Prints version information
+        --help            Prints help information
+    -l, --passwordless    Use passwordless authentication [env: TME_TSM_PASSWORDLESS=]
+    -V, --version         Prints version information
 
 OPTIONS:
     -c, --checks <CHECKS>            Username for TSM Authentication [env: TME_CHECKS=] [default:
                                      all] [possible values: all, tsm, systeminfo]
-    -s, --si_hostname <BASEURL>      Tableau Server's systeminfo web server base URL [env:
+    -s, --si-hostname <BASEURL>      Tableau Server's systeminfo web server base URL [env:
                                      TME_SI_HOSTNAME=] [default: https://localhost/]
-    -h, --tsm_hostname <BASEURL>     Tableau Server TSM's base url [env: TME_TSM_HOSTNAME=]
+    -h, --tsm-hostname <BASEURL>     Tableau Server TSM's base url [env: TME_TSM_HOSTNAME=]
                                      [default: https://localhost:8850/]
-    -p, --tsm_password <PASSWORD>    PASSWORD for TSM Authentication [env: TME_TSM_PASSWORD=]
-    -u, --tsm_user <USERNAME>        Username for TSM Authentication [env: TME_TSM_USER=]
+    -p, --tsm-password <PASSWORD>    PASSWORD for TSM Authentication [env: TME_TSM_PASSWORD=]
+        --tsm-socket <tsm_socket>    TSM Socket to connect [env: TME_TSM_SOCKET=] [default:
+                                     /var/run/tableau/tab-controller-login-8850]
+    -u, --tsm-user <USERNAME>        Username for TSM Authentication [env: TME_TSM_USER=]
 ```
 
 To use it from Telegraf, configure `[[input.execd]]` as:
