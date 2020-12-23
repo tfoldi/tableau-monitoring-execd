@@ -166,6 +166,8 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), Box<dyn Error
         let cookie = get_passwordless_cookie(login_result.cookie_name, login_result.cookie_value);
         status_req = agent.get(&status_url)
             .set("Set-Cookie", &cookie.as_str());
+        println!("{:?}", status_req);
+
     } else {
         agent.post(&logon_url)
             .send_json(ureq::json!({
