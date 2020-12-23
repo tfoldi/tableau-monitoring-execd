@@ -1,4 +1,4 @@
-use ureq::{Agent, AgentBuilder};
+use ureq::{Agent, AgentBuilder, Cookie};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::sync::Arc;
 use serde::{Deserialize};
@@ -6,13 +6,12 @@ use clap::ArgMatches;
 use std::error::Error;
 use std::io::BufRead;
 use std::os::unix::net::UnixStream;
+use thrift::protocol::{TBinaryInputProtocol, TBinaryOutputProtocol};
 
 mod tls;
-
 mod passwordless_login;
 
 pub use passwordless_login::*;
-use thrift::protocol::{TBinaryInputProtocol, TBinaryOutputProtocol};
 
 
 #[derive(Deserialize)]
@@ -135,8 +134,22 @@ fn check_system_info(agent: &Agent, url: &str) -> Result<(), Box<dyn Error>> {
     }
 }
 
+fn get_passwordless_cookie(name: Option<String>, value: Option<String>) -> String {
+    match (name,value) {
+        (Some(name),Some(value)) => {
+            Cookie::build(name, value)
+                .domain("localhost")
+                .path("/")
+                .secure(true)
+                .http_only(true)
+                .finish()
+                .to_string()
+        },
+        _ => "".to_string()
+    }
+}
 
-fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> {
+fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), Box<dyn Error>> {
     let tsm_host = args.value_of("tsm_hostname").expect("tsm_hostname must be defined");
 
     let logon_url = std::format!("{}api/0.5/login",tsm_host);
@@ -144,16 +157,28 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
 
     let start = Instant::now();
 
-    agent.post(&logon_url)
-        .send_json(ureq::json!({
+    let status_req;
+
+
+    if cfg!(unix) && args.is_present("passwordless_login") {
+        let tsm_socket = args.value_of("tsm_socket").expect("TSM socket must be defined");
+        let login_result = get_passwordless_result(tsm_socket)?;
+        let cookie = get_passwordless_cookie(login_result.cookie_name, login_result.cookie_value);
+        status_req = agent.get(&status_url)
+            .set("Set-Cookie", &cookie.as_str());
+    } else {
+        agent.post(&logon_url)
+            .send_json(ureq::json!({
             "authentication": {
                 "name": args.value_of("tsm_user").expect("TSM username must be defined") ,
                 "password": args.value_of("tsm_password").expect("TSM password var must be defined")
             }}))?
-        .into_string()?;
+            .into_string()?;
+        status_req = agent.get(&status_url);
+    }
 
 
-    let status: ClusterStatus = agent.get(&status_url)
+    let status: ClusterStatus = status_req
         .call()?
         .into_json()?;
     let cluster_status = status.cluster_status;
@@ -208,23 +233,25 @@ fn check_tsm_nodes(agent: &Agent, args: &ArgMatches) -> Result<(), ureq::Error> 
     Ok(())
 }
 
-pub fn get_passwordless_cookie() {
-    let socket_tx = UnixStream::connect("/var/run/tableau/tab-controller-login-8850").unwrap();
-    let socket_rx = socket_tx.try_clone().unwrap();
+#[cfg(unix)]
+pub fn get_passwordless_result(socket_path: &str) -> thrift::Result<PasswordLessLoginResult> {
+    let socket_tx = UnixStream::connect(socket_path)?;
+    let socket_rx = socket_tx.try_clone()?;
 
     let in_proto = TBinaryInputProtocol::new(socket_tx, true);
     let out_proto = TBinaryOutputProtocol::new(socket_rx, true);
     let mut client = PasswordLessLoginSyncClient::new(in_proto, out_proto);
 
+    let passwordless_login_result = client.login();
+
     println!("{:?}", client.login());
 
+    passwordless_login_result
 }
 
 pub fn run(args: &ArgMatches) {
     let hostname = args.value_of("systeminfo_hostname").expect("Missing Server hostname");
     let checks = args.value_of("checks").expect("No checks are defined.");
-
-    get_passwordless_cookie();
 
     let mut tls_config = rustls::ClientConfig::new();
     tls_config
