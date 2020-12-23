@@ -5,6 +5,8 @@ use serde::{Deserialize};
 use clap::ArgMatches;
 use std::error::Error;
 use std::io::BufRead;
+
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use thrift::protocol::{TBinaryInputProtocol, TBinaryOutputProtocol};
 
@@ -245,6 +247,11 @@ pub fn get_passwordless_result(socket_path: &str) -> thrift::Result<PasswordLess
     let passwordless_login_result = client.login();
 
     passwordless_login_result
+}
+
+#[cfg(windows)]
+pub fn get_passwordless_result(socket_path: &str) -> thrift::Result<PasswordLessLoginResult> {
+    panic!("Named pipe based serverless auth is not implemented yet.");
 }
 
 pub fn run(args: &ArgMatches) {
