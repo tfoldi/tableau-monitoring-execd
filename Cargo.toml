@@ -1,6 +1,6 @@
 [package]
 name = "tableau-monitoring-execd"
-version = "1.0.0-rc1"
+version = "1.0.0-rc2"
 authors = ["Tamas Foldi <tfoldi@starschema.com>"]
 edition = "2018"
 description = "telegraf execd for getting Tableau Cluster status using TSM API and serverinfo.xml"
