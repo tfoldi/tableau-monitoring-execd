@@ -10,6 +10,9 @@ use std::io::BufRead;
 use std::os::unix::net::UnixStream;
 use thrift::protocol::{TBinaryInputProtocol, TBinaryOutputProtocol};
 
+#[cfg(feature = "setuid")]
+use users::{switch::set_current_uid, get_effective_uid};
+
 mod tls;
 mod passwordless_login;
 
@@ -254,9 +257,20 @@ pub fn get_passwordless_result(socket_path: &str) -> thrift::Result<PasswordLess
     panic!("Named pipe based serverless auth is not implemented yet.");
 }
 
+#[cfg(feature = "setuid")]
+pub fn change_current_uid() -> () {
+
+    if let Err(e) = set_current_uid(get_effective_uid()) {
+        eprintln!("Cannot set uid: {}", e.to_string());
+    }
+}
+
 pub fn run(args: &ArgMatches) {
     let hostname = args.value_of("systeminfo_hostname").expect("Missing Server hostname");
     let checks = args.value_of("checks").expect("No checks are defined.");
+
+    #[cfg(feature = "setuid")]
+    change_current_uid();
 
     let mut tls_config = rustls::ClientConfig::new();
     tls_config
