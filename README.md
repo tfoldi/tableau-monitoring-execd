@@ -16,7 +16,7 @@ FLAGS:
     -V, --version         Prints version information
 
 OPTIONS:
-    -c, --checks <CHECKS>            Username for TSM Authentication [env: TME_CHECKS=] [default:
+    -c, --checks <CHECKS>            Which method(s) to use for collecting status data [env: TME_CHECKS=] [default:
                                      all] [possible values: all, tsm, systeminfo]
     -s, --si-hostname <BASEURL>      Tableau Server's systeminfo web server base URL [env:
                                      TME_SI_HOSTNAME=] [default: https://localhost/]
